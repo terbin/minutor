@@ -4,6 +4,7 @@
 
 #include <QtWidgets/QMenu>
 #include <QDirIterator>
+#include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -68,7 +69,11 @@ bool WorldInfo::parseWorldInfo()
 {
   NBT level(folder.filePath("level.dat"));
   auto data = level.at("Data");
-  if (!data) return false;
+  if (!data) {
+    // level.dat missing or invalid - try to detect version from chunk data
+    detectDataVersionFromChunks();
+    return false;
+  }
 
   if (data->has("LevelName"))
     levelName = data->at("LevelName")->toString();
@@ -77,6 +82,11 @@ bool WorldInfo::parseWorldInfo()
     const Tag_Int * dataversiontag = dynamic_cast<const Tag_Int *>(data->at("DataVersion"));
     if (dataversiontag)
       dataVersion = dataversiontag->toUInt();
+  }
+
+  // Fallback: if level.dat exists but has no DataVersion, try chunk detection
+  if (dataVersion == 0) {
+    detectDataVersionFromChunks();
   }
 
   if (data->has("DayTime")) {
@@ -439,4 +449,60 @@ void WorldInfo::changeViewToDimension() {
 bool WorldInfo::isDatapackEnabled(const QString name_space) const
 {
   return datapacks.contains(name_space);
+}
+
+
+bool WorldInfo::detectDataVersionFromChunks()
+{
+  // Find first available region file
+  QStringList regionPaths = {"region", "DIM1/region", "DIM-1/region"};
+  QString regionFile;
+
+  for (const QString &path : regionPaths) {
+    QDir dir(folder.filePath(path));
+    QStringList files = dir.entryList({"*.mca"}, QDir::Files);
+    if (!files.isEmpty()) {
+      regionFile = dir.filePath(files.first());
+      break;
+    }
+  }
+  if (regionFile.isEmpty()) return false;
+
+  // Open region file and find first chunk
+  QFile f(regionFile);
+  if (!f.open(QIODevice::ReadOnly) || f.size() < 4096) return false;
+
+  uchar *header = f.map(0, 4096);
+  if (!header) return false;
+
+  // Find first valid chunk in header
+  int chunkOffset = 0;
+  for (int i = 0; i < 1024 && chunkOffset == 0; i++) {
+    int off = i * 4;
+    chunkOffset = (header[off] << 16) | (header[off + 1] << 8) | header[off + 2];
+  }
+  f.unmap(header);
+  if (chunkOffset == 0) return false;
+
+  // Read chunk length
+  qint64 chunkStart = chunkOffset * 4096;
+  if (f.size() < chunkStart + 5) return false;
+  f.seek(chunkStart);
+  char lenBuf[4];
+  if (f.read(lenBuf, 4) != 4) return false;
+  int len = (uchar(lenBuf[0]) << 24) | (uchar(lenBuf[1]) << 16) |
+            (uchar(lenBuf[2]) << 8) | uchar(lenBuf[3]);
+  if (len <= 0 || f.size() < chunkStart + 4 + len) return false;
+
+  // Parse chunk NBT
+  uchar *raw = f.map(chunkStart, len + 4);
+  if (!raw) return false;
+  NBT nbt(raw);
+  f.unmap(raw);
+
+  if (nbt.has("DataVersion")) {
+    dataVersion = nbt.at("DataVersion")->toInt();
+    return true;
+  }
+  return false;
 }

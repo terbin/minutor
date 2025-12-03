@@ -69,6 +69,7 @@ class WorldInfo : public QObject
   bool parseDatapackNamespace(const QString name_space, const QString path, bool enabled, bool zipped);
   bool parseDimension(const QJsonDocument & json_doc, QString pack_name, QString dim_name);
   bool parseDimensionType(DimensionInfo & dim, const QString & dim_type_id);
+  bool detectDataVersionFromChunks();
 
   QDir                  folder;       // base folder of world
   QString               levelName;    // custom world name
