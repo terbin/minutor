@@ -202,6 +202,25 @@
       </widget>
      </item>
      <item>
+      <widget class="QGroupBox" name="groupBox_Zoom">
+       <property name="title">
+        <string>Zoom</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_7">
+        <item>
+         <widget class="QCheckBox" name="checkBox_ZoomFollowsCursor">
+          <property name="text">
+           <string>Zoom toward mouse cursor</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
       <widget class="QDialogButtonBox" name="buttonBox">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
